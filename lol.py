@@ -11,8 +11,34 @@ from PyQt5 import QtWidgets, QtCore
 from math import cos, sin, pi
 from vispy.color import Color
 import random
+import json
+import os
+
+# Load element info from external JSON file if available (robust search)
+ELEMENT_INFO = {}
+_json_path_candidates = []
+try:
+    _json_path_candidates.append(os.path.join(os.path.dirname(__file__), 'elements.json'))
+except Exception:
+    pass
+_json_path_candidates.append(os.path.join(os.getcwd(), 'elements.json'))
+for _json_path in _json_path_candidates:
+    if os.path.exists(_json_path):
+        try:
+            with open(_json_path, 'r', encoding='utf-8') as f:
+                ELEMENT_INFO = json.load(f)
+            break
+        except Exception as e:
+            print('Failed to load elements.json from', _json_path, ':', e)
+            ELEMENT_INFO = {}
 
 qt_app = QtWidgets.QApplication(sys.argv)
+
+# Ensure VisPy uses the PyQt5 backend to integrate with the Qt event loop
+try:
+    app.use_app('pyqt5')
+except Exception:
+    pass
 
 canvas = scene.SceneCanvas(keys='interactive', size=(1000, 600), show=False)
 canvas.bgcolor = 'white'
@@ -33,6 +59,142 @@ is_black_hole = False  # Track black hole state
 NEUTRON_EXPLODE_COUNT = 5  # Number of neutrons to animate outward per explosion
 
 chance_percent = 0.01
+
+# Global element name mapping (used for AtomName and info sidebar)
+ELEMENT_NAMES = {
+    1: "Hydrogen",
+    2: "Helium",
+    3: "Lithium",
+    4: "Beryllium",
+    5: "Boron",
+    6: "Carbon",
+    7: "Nitrogen",
+    8: "Oxygen",
+    9: "Fluorine",
+    10: "Neon",
+    11: "Sodium",
+    12: "Magnesium",
+    13: "Aluminum",
+    14: "Silicon",
+    15: "Phosphorus",
+    16: "Sulfur",
+    17: "Chlorine",
+    18: "Argon",
+    19: "Potassium",
+    20: "Calcium",
+    21: "Scandium",
+    22: "Titanium",
+    23: "Vanadium",
+    24: "Chromium",
+    25: "Manganese",
+    26: "Iron",
+    27: "Cobalt",
+    28: "Nickel",
+    29: "Copper",
+    30: "Zinc",
+    31: "Gallium",
+    32: "Germanium",
+    33: "Arsenic",
+    34: "Selenium",
+    35: "Bromine",
+    36: "Krypton",
+    37: "Rubidium",
+    38: "Strontium",
+    39: "Yttrium",
+    40: "Zirconium",
+    41: "Niobium",
+    42: "Molybdenum",
+    43: "Technetium",
+    44: "Ruthenium",
+    45: "Rhodium",
+    46: "Palladium",
+    47: "Silver",
+    48: "Cadmium",
+    49: "Indium",
+    50: "Tin",
+    51: "Antimony",
+    52: "Tellurium",
+    53: "Iodine",
+    54: "Xenon",
+    55: "Cesium",
+    56: "Barium",
+    57: "Lanthanum",
+    58: "Cerium",
+    59: "Praseodymium",
+    60: "Neodymium",
+    61: "Promethium",
+    62: "Samarium",
+    63: "Europium",
+    64: "Gadolinium",
+    65: "Terbium",
+    66: "Dysprosium",
+    67: "Holmium",
+    68: "Erbium",
+    69: "Thulium",
+    70: "Ytterbium",
+    71: "Lutetium",
+    72: "Hafnium",
+    73: "Tantalum",
+    74: "Tungsten",
+    75: "Rhenium",
+    76: "Osmium",
+    77: "Iridium",
+    78: "Platinum",
+    79: "Gold",
+    80: "Mercury",
+    81: "Thallium",
+    82: "Lead",
+    83: "Bismuth",
+    84: "Polonium",
+    85: "Astatine",
+    86: "Radon",
+    87: "Francium",
+    88: "Radium",
+    89: "Actinium",
+    90: "Thorium",
+    91: "Protactinium",
+    92: "Uranium",
+    93: "Neptunium",
+    94: "Plutonium",
+    95: "Americium",
+    96: "Curium",
+    97: "Berkelium",
+    98: "Californium",
+    99: "Einsteinium",
+    100: "Fermium",
+    101: "Mendelevium",
+    102: "Nobelium",
+    103: "Lawrencium",
+    104: "Rutherfordium",
+    105: "Dubnium",
+    106: "Seaborgium",
+    107: "Bohrium",
+    108: "Hassium",
+    109: "Meitnerium",
+    110: "Darmstadtium",
+    111: "Roentgenium",
+    112: "Copernicium",
+    113: "Nihonium",
+    114: "Flerovium",
+    115: "Moscovium",
+    116: "Livermorium",
+    117: "Tennessine",
+    118: "Oganesson",
+    119: "Ununennium",
+    120: "Unbinilium",
+    121: "Unbiunium",
+    122: "Unbibium ",
+}
+
+# Load element info from external JSON file if available
+ELEMENT_INFO = {}
+_json_path = os.path.join(os.path.dirname(__file__), 'elements.json')
+if os.path.exists(_json_path):
+    try:
+        with open(_json_path, 'r', encoding='utf-8') as f:
+            ELEMENT_INFO = json.load(f)
+    except Exception as e:
+        print('Failed to load elements.json:', e)
 
 def random_nucleus_pos(scale=0.1):
     return np.random.normal(scale=scale, size=3)
@@ -313,14 +475,28 @@ def add_particle(particle_type):
     if abs(n - p) >= 150:
         make_black_hole()
         return
-    # If neutron-proton difference > 10, show a 10-second timer, then animate decay
-    if abs(n - p) > 10:
+    # If large imbalance (>10) schedule a decay for the species in excess
+    electron_excess = len(electrons) - p
+    diff = n - p
+    if diff > 10 or diff < -10 or electron_excess > 10:
         if 'window' in globals() and window:
-            window.show_decay_timer(10)
-        def start_decay():
+            # determine which species is in excess
+            if diff > 10:
+                species = 'neutron'
+            elif diff < -10:
+                species = 'proton'
+            else:
+                species = 'electron'
+            window.show_decay_timer(10, species)
+        def start_decay(sp=species):
             if 'window' in globals() and window:
                 window.hide_decay_timer()
-            animate_neutron_decay(target_diff=3)
+            if sp == 'neutron':
+                animate_neutron_decay(target_diff=3)
+            elif sp == 'proton':
+                animate_proton_decay(target_diff=3)
+            else:
+                animate_electron_decay(target_diff=3)
         QTimer.singleShot(10000, start_decay)
     print(f"Added {particle_type}")
 
@@ -355,133 +531,7 @@ def AtomName():
         make_black_hole()
         return "BLACK HOLE"
 
-    # Basic element names
-    names = {
-        1: "Hydrogen",
-        2: "Helium",
-        3: "Lithium",
-        4: "Beryllium",
-        5: "Boron",
-        6: "Carbon",
-        7: "Nitrogen",
-        8: "Oxygen",
-        9: "Fluorine",
-        10: "Neon",
-        11: "Sodium",
-        12: "Magnesium",
-        13: "Aluminum",
-        14: "Silicon",
-        15: "Phosphorus",
-        16: "Sulfur",
-        17: "Chlorine",
-        18: "Argon",
-        19: "Potassium",
-        20: "Calcium",
-        21: "Scandium",
-        22: "Titanium",
-        23: "Vanadium",
-        24: "Chromium",
-        25: "Manganese",
-        26: "Iron",
-        27: "Cobalt",
-        28: "Nickel",
-        29: "Copper",
-        30: "Zinc",
-        31: "Gallium",
-        32: "Germanium",
-        33: "Arsenic",
-        34: "Selenium",
-        35: "Bromine",
-        36: "Krypton",
-        37: "Rubidium",
-        38: "Strontium",
-        39: "Yttrium",
-        40: "Zirconium",
-        41: "Niobium",
-        42: "Molybdenum",
-        43: "Technetium",
-        44: "Ruthenium",
-        45: "Rhodium",
-        46: "Palladium",
-        47: "Silver",
-        48: "Cadmium",
-        49: "Indium",
-        50: "Tin",
-        51: "Antimony",
-        52: "Tellurium",
-        53: "Iodine",
-        54: "Xenon",
-        55: "Cesium",
-        56: "Barium",
-        57: "Lanthanum",
-        58: "Cerium",
-        59: "Praseodymium",
-        60: "Neodymium",
-        61: "Promethium",
-        62: "Samarium",
-        63: "Europium",
-        64: "Gadolinium",
-        65: "Terbium",
-        66: "Dysprosium",
-        67: "Holmium",
-        68: "Erbium",
-        69: "Thulium",
-        70: "Ytterbium",
-        71: "Lutetium",
-        72: "Hafnium",
-        73: "Tantalum",
-        74: "Tungsten",
-        75: "Rhenium",
-        76: "Osmium",
-        77: "Iridium",
-        78: "Platinum",
-        79: "Gold",
-        80: "Mercury",
-        81: "Thallium",
-        82: "Lead",
-        83: "Bismuth",
-        84: "Polonium",
-        85: "Astatine",
-        86: "Radon",
-        87: "Francium",
-        88: "Radium",
-        89: "Actinium",
-        90: "Thorium",
-        91: "Protactinium",
-        92: "Uranium",
-        93: "Neptunium",
-        94: "Plutonium",
-        95: "Americium",
-        96: "Curium",
-        97: "Berkelium",
-        98: "Californium",
-        99: "Einsteinium",
-        100: "Fermium",
-        101: "Mendelevium",
-        102: "Nobelium",
-        103: "Lawrencium",
-        104: "Rutherfordium",
-        105: "Dubnium",
-        106: "Seaborgium",
-        107: "Bohrium",
-        108: "Hassium",
-        109: "Meitnerium",
-        110: "Darmstadtium",
-        111: "Roentgenium",
-        112: "Copernicium",
-        113: "Nihonium",
-        114: "Flerovium",
-        115: "Moscovium",
-        116: "Livermorium",
-        117: "Tennessine",
-        118: "Oganesson",
-        119: "Ununennium",
-        120: "Unbinilium",
-        121: "Unbiunium",
-        122: "Unbibium ",
-    }
-
-    base_name = names.get(p, f"Element Z={p}")
+    base_name = ELEMENT_NAMES.get(p, f"Element Z={p}")
 
     # Require at least 1 proton and 1 electron for stability
     if p < 1 or e < 1:
@@ -694,6 +744,90 @@ def animate_neutron_decay(target_diff=3):
         animate()
     decay_step()
 
+
+def animate_proton_decay(target_diff=3):
+    # Animate removal of protons until p - n <= target_diff
+    def decay_step():
+        p = len(protons)
+        n = len(neutrons)
+        if p - n <= target_diff or not protons:
+            if 'window' in globals() and window:
+                window.update_counter()
+                window.update_atom_name()
+            return
+        # Animate one proton outward
+        v = protons.pop()
+        pos = np.array(v.transform.translate)
+        if pos.shape[0] > 3:
+            pos = pos[:3]
+        dir = np.random.normal(size=3)
+        dir = dir / np.linalg.norm(dir)
+        steps = 30
+        interval = 30
+        def animate(step=0):
+            if step >= steps:
+                v.parent = None
+                canvas.update()
+                QTimer.singleShot(50, decay_step)
+                return
+            v.transform.translate = pos + dir * (step / steps) * 4.0
+            canvas.update()
+            QTimer.singleShot(interval, lambda: animate(step+1))
+        animate()
+    decay_step()
+
+
+def animate_electron_decay(target_diff=3):
+    # Animate removal of electrons until e - p <= target_diff
+    def decay_step():
+        p = len(protons)
+        e = len(electrons)
+        if e - p <= target_diff or not electrons:
+            if 'window' in globals() and window:
+                window.update_counter()
+                window.update_atom_name()
+            return
+        # Animate one electron outward (also remove its trail and params)
+        v = electrons.pop()
+        # Also remove corresponding trail and params if present
+        trail = None
+        if electron_trails:
+            try:
+                trail = electron_trails.pop()
+            except Exception:
+                trail = None
+        if electron_params:
+            try:
+                electron_params.pop()
+            except Exception:
+                pass
+        if electron_trail_points:
+            try:
+                electron_trail_points.pop()
+            except Exception:
+                pass
+        pos = np.array(v.transform.translate)
+        if pos.shape[0] > 3:
+            pos = pos[:3]
+        dir = np.random.normal(size=3)
+        dir = dir / np.linalg.norm(dir)
+        steps = 30
+        interval = 30
+        def animate(step=0):
+            if step >= steps:
+                v.parent = None
+                if trail is not None:
+                    trail.parent = None
+                canvas.update()
+                QTimer.singleShot(50, decay_step)
+                return
+            v.transform.translate = pos + dir * (step / steps) * 4.0
+            canvas.update()
+            QTimer.singleShot(interval, lambda: animate(step+1))
+        animate()
+    decay_step()
+# ...existing code...
+
 class AnimatedSidebar(QWidget):
     def add_protons(self, amount=1):
         if globals().get('is_black_hole', False):
@@ -763,6 +897,51 @@ class AnimatedSidebar(QWidget):
         text = f"Protons: {len(protons)} | Neutrons: {len(neutrons)} | Electrons: {len(electrons)}"
         self.counter_label.setText(text)
         self.update_atom_name()  # Always update label and black hole logic after any change
+        # Also update info panel
+        self.update_info_panel()
+
+    def update_info_panel(self):
+        # Build info text from ELEMENT_INFO JSON if available
+        p = len(protons)
+        n = len(neutrons)
+        e = len(electrons)
+        if p < 1:
+            # Update right-side info panel
+            try:
+                self.info_label_right.setText("No nucleus present.")
+            except Exception:
+                pass
+            return
+        elem = ELEMENT_INFO.get(str(p)) if isinstance(ELEMENT_INFO, dict) else None
+        base_name = ELEMENT_NAMES.get(p, f"Element Z={p}")
+        stability = "Stable" if (abs(p - n) <= 2 and abs(p - e) <=5 and p>=1 and e>=1) else "Unstable"
+        info_lines = [f"Name: {base_name}", f"Z (Protons): {p}", f"Neutrons: {n}", f"Electrons: {e}", f"Stability: {stability}"]
+        # Isotope detection: check mass number (Z + N) against JSON isotopes keys (assumed mass numbers)
+        isotope_text = None
+        mass_number = p + n
+        if elem and 'isotopes' in elem and isinstance(elem['isotopes'], dict):
+            iso_entry = elem['isotopes'].get(str(mass_number)) or elem['isotopes'].get(str(n))
+            if iso_entry:
+                name = iso_entry.get('name') or iso_entry.get('title') or f"Isotope {mass_number}"
+                info = iso_entry.get('info') or iso_entry.get('description') or ''
+                isotope_text = f"Isotope: {name} - {info}"
+        # Fallback simple rule: if neutrons != p, show isotope-like note
+        if isotope_text is None and n != p:
+            isotope_text = f"Isotope-like: mass number {mass_number} (N={n})"
+        if isotope_text:
+            info_lines.append(isotope_text)
+        # Include JSON description if available
+        if elem and 'description' in elem:
+            info_lines.append(f"Description: {elem['description']}")
+        # Write to the right-side info label if present, fallback to previous if not
+        text = '\n'.join(info_lines)
+        try:
+            self.info_label_right.setText(text)
+        except Exception:
+            try:
+                self.info_label.setText(text)
+            except Exception:
+                pass
 
     def add_reset_button(self):
         reset_btn = QPushButton("RESET")
@@ -790,10 +969,10 @@ class AnimatedSidebar(QWidget):
         self.sidebar_width = 200
         self.init_ui()
         self.counter_label = QLabel()
-        self.counter_label.setStyleSheet("color: white; font-weight: bold; margin-top: 15px;")
+        # Improved counter label styling for readability
+        self.counter_label.setStyleSheet("color: white; font-weight: bold; margin-top: 15px; font-size: 14px; padding:4px;")
         self.counter_label.setWordWrap(True)
         self.sidebar_layout.addWidget(self.counter_label)
-        self.update_counter()
         # self.add_explode_button()  # Removed EXPLODE button
         # self.add_neutron_explode_button()  # Removed NEUTRON EXPLODE button
         self.add_reset_button()    # Add RESET button
@@ -811,35 +990,95 @@ class AnimatedSidebar(QWidget):
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(0)
 
+        # Larger, visible Close and Toggle buttons (less flashy)
         self.close_btn = QPushButton("✕")
-        self.close_btn.setFixedSize(25, 25)
+        self.close_btn.setFixedSize(36, 36)
+        self.close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #c62828;
+                color: white;
+                font-weight: bold;
+                font-size: 18px;
+                border-radius: 6px;
+                border: 1px solid #7f0000;
+            }
+            QPushButton:hover {
+                background-color: #b71c1c;
+            }
+        """)
         self.close_btn.clicked.connect(QApplication.quit)
 
         self.toggle_btn = QPushButton("☰")
-        self.toggle_btn.setFixedSize(25, 25)
-        self.toggle_btn.clicked.connect(self.toggle_sidebar)
+        self.toggle_btn.setFixedSize(36, 36)
+        self.toggle_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #d45353;
+                color: white;
+                font-weight: bold;
+                font-size: 18px;
+                border-radius: 6px;
+                border: 1px solid #8e0000;
+            }
+            QPushButton:hover {
+                background-color: #c03939;
+            }
+        """)
+        # Toggle the right-hand info panel rather than collapsing the main sidebar
+        self.toggle_btn.clicked.connect(self.toggle_info_panel)
+
+        # Fullscreen toggle button
+        self.fullscreen_btn = QPushButton("⛶")
+        self.fullscreen_btn.setFixedSize(36, 36)
+        self.fullscreen_btn.setStyleSheet("""
+            QPushButton { background-color: #4caf50; color: white; border-radius:6px; border:1px solid #2e7d32; }
+            QPushButton:hover { background-color: #388e3c; }
+        """)
+        self.fullscreen_btn.clicked.connect(self.toggle_fullscreen)
+
+        # Theme toggle button (light/dark)
+        self.theme_btn = QPushButton("☼")
+        self.theme_btn.setFixedSize(36, 36)
+        self.theme_btn.setStyleSheet("""
+            QPushButton { background-color: #ffc107; color: #222; border-radius:6px; border:1px solid #b28704; }
+            QPushButton:hover { background-color: #ffb300; }
+        """)
+        self.theme_btn.clicked.connect(self.toggle_theme)
 
         toggle_layout = QVBoxLayout()
+        toggle_layout.setContentsMargins(6,6,6,6)
+        toggle_layout.setSpacing(8)
         toggle_layout.addWidget(self.close_btn)
         toggle_layout.addWidget(self.toggle_btn)
+        toggle_layout.addWidget(self.fullscreen_btn)
+        toggle_layout.addWidget(self.theme_btn)
         toggle_layout.addStretch()
 
         toggle_widget = QWidget()
         toggle_widget.setLayout(toggle_layout)
-        toggle_widget.setFixedWidth(40)
-        toggle_widget.setStyleSheet("background-color:#16171a;")
+        toggle_widget.setFixedWidth(56)
+        toggle_widget.setStyleSheet("background-color:#1f1f23;")
 
         self.sidebar = QFrame()
+        # Keep the sidebar at a stable width so it doesn't get cramped, but allow animation by using max/min
         self.sidebar.setMaximumWidth(self.sidebar_width)
-        self.sidebar.setMinimumWidth(0)
-        self.sidebar.setStyleSheet("background-color: #404145; border-right: 1px solid #ccc;")
+        self.sidebar.setMinimumWidth(self.sidebar_width)
+        # Simpler, subtler sidebar styling (less flashy)
+        self.sidebar.setStyleSheet("""
+            QFrame { background: #2f3136; border-right: 1px solid #444444; }
+            QLabel { font-family: 'Segoe UI', 'Verdana', 'Arial'; color: #f5f5f5; }
+        """)
         self.sidebar_layout = QVBoxLayout(self.sidebar)
-        self.sidebar_layout.setContentsMargins(10, 10, 10, 10)
+        # Align content to top and give the sidebar slightly more padding so controls don't look cramped
+        self.sidebar_layout.setContentsMargins(14, 12, 14, 12)
         self.sidebar_layout.setSpacing(10)
+        self.sidebar_layout.setAlignment(Qt.AlignTop)
+
+        # Sidebar content will remain controls only; info panel will be on the right
+        # (Removed early addStretch to avoid large top gap)
 
         def create_button_row(label_text, add_callback, remove_callback):
             label = QLabel(label_text)
-            label.setStyleSheet("color: white; font-weight: bold;")
+            label.setStyleSheet("color: #f5f5f5; font-weight: bold;")
             self.sidebar_layout.addWidget(label)
 
             add_container = QWidget()
@@ -849,13 +1088,14 @@ class AnimatedSidebar(QWidget):
                 btn = QPushButton(text)
                 btn.setStyleSheet("""
                     QPushButton {
-                        background-color: #8FBEED;
+                        background-color: #6ea8fe;
                         color: white;
                         border-radius: 3px;
-                        padding: 5px 10px;
+                        padding: 6px 10px;
+                        font-weight: 600;
                     }
                     QPushButton:hover {
-                        background-color: #45a049;
+                        background-color: #5b9cf5;
                     }
                 """)
                 amount = int(text.replace("+", ""))
@@ -870,13 +1110,14 @@ class AnimatedSidebar(QWidget):
                 btn = QPushButton(text)
                 btn.setStyleSheet("""
                     QPushButton {
-                        background-color: #e57373;
+                        background-color: #ef9a9a;
                         color: white;
                         border-radius: 3px;
-                        padding: 5px 10px;
+                        padding: 6px 10px;
+                        font-weight: 600;
                     }
                     QPushButton:hover {
-                        background-color: #b71c1c;
+                        background-color: #e57373;
                     }
                 """)
                 amount = int(text.replace("-", ""))
@@ -898,72 +1139,189 @@ class AnimatedSidebar(QWidget):
 
         self.canvas_label = QLabel(AtomName())
         self.canvas_label.setAlignment(Qt.AlignCenter)
+        # Polished label styling for the canvas title
         self.canvas_label.setStyleSheet("""
             QLabel {
-                font-size: 18px;
+                font-size: 22px;
                 font-weight: bold;
-                padding: 10px;
-                background-color: #f0f0f0;
-                border-bottom: 1px solid #ccc;
+                padding: 12px;
+                background-color: #fafafa;
+                color: #222222;
+                border-bottom: 1px solid #e0e0e0;
             }
         """)
         content_layout.addWidget(self.canvas_label)
         # Create decay timer label (but don't show yet)
         self.decay_timer_label = QLabel()
         self.decay_timer_label.setAlignment(Qt.AlignCenter)
-        self.decay_timer_label.setStyleSheet("font-size: 20px; color: #d32f2f; font-weight: bold; background: #fffbe6; border: 2px solid #d32f2f; border-radius: 8px; padding: 8px; margin: 10px;")
-        self.decay_timer_label.setMinimumWidth(180)
+        # Improved decay timer styling
+        self.decay_timer_label.setStyleSheet("font-size: 20px; color: #d32f2f; font-weight: bold; background: #fff3f2; border: 2px solid #d32f2f; border-radius: 8px; padding: 8px; margin: 10px;")
+        self.decay_timer_label.setMinimumWidth(220)
         self.decay_timer_label.hide()
         content_layout.addWidget(self.decay_timer_label)
         # ----------------------
 
         content_layout.addWidget(canvas.native)
 
+        # Right-side info panel (subdued, toggleable)
+        self.info_width = 320
+        self.info_panel_right = QFrame()
+        # Allow animation by setting a maximum width; start visible at info_width
+        self.info_panel_right.setMinimumWidth(0)
+        self.info_panel_right.setMaximumWidth(self.info_width)
+        self.info_panel_right.setStyleSheet("""
+            QFrame { background: #f7f8fa; border-left: 1px solid #dddddd; border-radius:6px; }
+            QLabel#InfoTitle { color: #333333; font-weight: 700; font-size: 16px; }
+            QLabel#InfoText { color: #444444; font-size: 13px; }
+        """)
+        self.info_layout_right = QVBoxLayout(self.info_panel_right)
+        self.info_layout_right.setContentsMargins(12,12,12,12)
+        self.info_layout_right.setSpacing(8)
+        self.info_title_right = QLabel("ELEMENT INFO")
+        self.info_title_right.setObjectName('InfoTitle')
+        self.info_layout_right.addWidget(self.info_title_right)
+        self.info_label_right = QLabel("")
+        self.info_label_right.setObjectName('InfoText')
+        self.info_label_right.setWordWrap(True)
+        self.info_layout_right.addWidget(self.info_label_right)
+
         self.main_layout.addWidget(toggle_widget)
         self.main_layout.addWidget(self.sidebar)
         self.main_layout.addWidget(self.content)
+        self.main_layout.addWidget(self.info_panel_right)
 
+        # Animation to toggle the right info panel width
+        self.info_animation = QPropertyAnimation(self.info_panel_right, b"maximumWidth")
+        self.info_animation.setDuration(260)
+        self.info_animation.setEasingCurve(QEasingCurve.OutCubic)
+        self.info_panel_visible = True
+
+        # Ensure sidebar animation exists and connect finished signals
         self.animation = QPropertyAnimation(self.sidebar, b"maximumWidth")
         self.animation.setDuration(300)
         self.animation.setEasingCurve(QEasingCurve.OutCubic)
+        self.animation.finished.connect(self._on_sidebar_animation_finished)
+        self.info_animation.finished.connect(self._on_info_animation_finished)
+        # Track theme: start with light theme
+        self._theme_dark = False
 
     def toggle_sidebar(self):
+        # Animate sidebar open/closed and update minimum width when done to preserve layout
         if self.sidebar_expanded:
             self.animation.setStartValue(self.sidebar_width)
             self.animation.setEndValue(0)
         else:
+            # Ensure the widget can grow before animating
+            self.sidebar.setMinimumWidth(0)
             self.animation.setStartValue(0)
             self.animation.setEndValue(self.sidebar_width)
         self.animation.start()
+        # flip expected state immediately so the finished handler can use it
         self.sidebar_expanded = not self.sidebar_expanded
 
-    def show_decay_timer(self, seconds):
+    def _on_sidebar_animation_finished(self):
+        # After animation, enforce a sensible minimum width when expanded, or allow 0 when collapsed
+        if self.sidebar_expanded:
+            self.sidebar.setMinimumWidth(self.sidebar_width)
+        else:
+            self.sidebar.setMinimumWidth(0)
+
+    def toggle_info_panel(self):
+        # Show/hide the right info panel with an animation
+        if self.info_panel_visible:
+            # collapse
+            start_w = self.info_panel_right.width() or self.info_panel_right.maximumWidth() or 320
+            self.info_animation.setStartValue(start_w)
+            self.info_animation.setEndValue(0)
+            self.info_animation.start()
+            # will hide at end
+        else:
+            # expand
+            self.info_panel_right.setVisible(True)
+            self.info_animation.setStartValue(0)
+            self.info_animation.setEndValue(320)
+            self.info_animation.start()
+        self.info_panel_visible = not self.info_panel_visible
+
+    def _on_info_animation_finished(self):
+        if not self.info_panel_visible:
+            # fully collapsed -> hide to remove from layout and avoid tiny cramped space
+            self.info_panel_right.setVisible(False)
+        else:
+            # restored -> ensure visible and max width set
+            self.info_panel_right.setVisible(True)
+            self.info_panel_right.setMaximumWidth(320)
+
+    def toggle_fullscreen(self):
+        if self.isFullScreen():
+            self.setWindowState(self.windowState() & ~QtCore.Qt.WindowFullScreen)
+        else:
+            self.setWindowState(self.windowState() | QtCore.Qt.WindowFullScreen)
+
+    def toggle_theme(self):
+        # Toggle between light and dark theme
+        if self._theme_dark:
+            # Switch to light theme
+            canvas.bgcolor = 'white'
+            # Update button icon/text if needed
+            self.theme_btn.setText("☼")  # Sun icon for light theme
+        else:
+            # Switch to dark theme
+            canvas.bgcolor = 'black'
+            # Update button icon/text if needed
+            self.theme_btn.setText("🌙")  # Moon icon for dark theme
+        self._theme_dark = not self._theme_dark  # Toggle state
+
+    def show_decay_timer(self, seconds, label=None):
+        """Show a proper countdown in the decay label and update every second.
+        Optional label: 'neutron' | 'proton' | 'electron' or a custom string.
+        """
+        # Ensure timer object exists and is single shared QTimer
+        self._decay_timer_seconds = int(seconds)
+        # Choose display text based on label
+        if label is None:
+            disp = f"Neutron decay in {self._decay_timer_seconds} s"
+        else:
+            disp_label = str(label).capitalize()
+            disp = f"{disp_label} decay in {self._decay_timer_seconds} s"
+        self.decay_timer_label.setText(disp)
         self.decay_timer_label.show()
-        self._decay_timer_seconds = seconds
-        self.decay_timer_label.setText(f"Neutron decay in {seconds} s")
-        # Cancel any previous timer
         if hasattr(self, '_decay_timer_qt') and self._decay_timer_qt is not None:
+            # stop and reset
             self._decay_timer_qt.stop()
-        def update_label():
+        else:
+            self._decay_timer_qt = QTimer(self)
+            self._decay_timer_qt.setInterval(1000)
+            self._decay_timer_qt.timeout.connect(self._decay_timer_tick)
+        self._decay_timer_qt.start()
+
+    def _decay_timer_tick(self):
+        # Called every second by the QTimer
+        try:
             self._decay_timer_seconds -= 1
-            if self._decay_timer_seconds > 0:
-                self.decay_timer_label.setText(f"Neutron decay in {self._decay_timer_seconds} s")
-                self._decay_timer_qt = QTimer()
-                self._decay_timer_qt.setSingleShot(True)
-                self._decay_timer_qt.timeout.connect(update_label)
-                self._decay_timer_qt.start(1000)
+        except Exception:
+            # Safety: if something went wrong, hide the timer
+            self.hide_decay_timer()
+            return
+        if self._decay_timer_seconds > 0:
+            # Keep existing label prefix when updating
+            full_text = self.decay_timer_label.text()
+            # Try to parse prefix (e.g., "Neutron decay in ") and replace the number
+            parts = full_text.rsplit(' ', 2)
+            if len(parts) >= 3:
+                prefix = ' '.join(parts[:-2]) + ' '
+                self.decay_timer_label.setText(f"{prefix}{self._decay_timer_seconds} s")
             else:
-                self.decay_timer_label.hide()  # Hide label when countdown finishes
-        self._decay_timer_qt = QTimer()
-        self._decay_timer_qt.setSingleShot(True)
-        self._decay_timer_qt.timeout.connect(update_label)
-        self._decay_timer_qt.start(1000)
+                self.decay_timer_label.setText(f"Neutron decay in {self._decay_timer_seconds} s")
+        else:
+            # Time's up, hide label and stop timer
+            self.hide_decay_timer()
 
     def hide_decay_timer(self):
-        self.decay_timer_label.hide()
+        # Stop and hide the decay timer cleanly
         if hasattr(self, '_decay_timer_qt') and self._decay_timer_qt is not None:
             self._decay_timer_qt.stop()
-            self._decay_timer_qt = None
+        self.decay_timer_label.hide()
 
     def run_atom_background_task(self):
         # Background task that runs every second if there is an atom
@@ -983,4 +1341,5 @@ class AnimatedSidebar(QWidget):
 if __name__ == "__main__":
     window = AnimatedSidebar()
     canvas.show()
-    app.run()
+    # Use the Qt application event loop to run the GUI
+    sys.exit(qt_app.exec_())

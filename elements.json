@@ -1,0 +1,54 @@
+{
+  "1": {
+    "name": "Hydrogen",
+    "symbol": "H",
+    "atomic_number": 1,
+    "description": "Lightest element.",
+    "isotopes": {
+      "1": {"name": "Protium", "info": "Most common hydrogen isotope (no neutrons). Stable."},
+      "2": {"name": "Deuterium", "info": "Stable isotope with one neutron. Used in heavy water."},
+      "3": {"name": "Tritium", "info": "Radioactive (half-life ~12.3 years)."}
+    }
+  },
+  "2": {
+    "name": "Helium",
+    "symbol": "He",
+    "atomic_number": 2,
+    "description": "Noble gas, inert.",
+    "isotopes": {
+      "3": {"name": "Helium-3", "info": "Stable, rare."},
+      "4": {"name": "Helium-4", "info": "Most common helium isotope. Stable."}
+    }
+  },
+  "6": {
+    "name": "Carbon",
+    "symbol": "C",
+    "atomic_number": 6,
+    "description": "Essential to life.",
+    "isotopes": {
+      "6": {"name": "Carbon-12", "info": "Most common, stable."},
+      "7": {"name": "Carbon-13", "info": "Stable, ~1% natural abundance."},
+      "8": {"name": "Carbon-14", "info": "Radioactive, used for dating (half-life ~5730 years)."}
+    }
+  },
+  "8": {
+    "name": "Oxygen",
+    "symbol": "O",
+    "atomic_number": 8,
+    "description": "Supports combustion and respiration.",
+    "isotopes": {
+      "8": {"name": "Oxygen-16", "info": "Most abundant, stable."},
+      "9": {"name": "Oxygen-17", "info": "Stable, rare."},
+      "10": {"name": "Oxygen-18", "info": "Stable, used in paleoclimate studies."}
+    }
+  },
+  "26": {
+    "name": "Iron",
+    "symbol": "Fe",
+    "atomic_number": 26,
+    "description": "Common transition metal.",
+    "isotopes": {
+      "30": {"name": "Iron-56", "info": "Most stable and abundant isotope."}
+    }
+  }
+}
