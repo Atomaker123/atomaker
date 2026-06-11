@@ -990,21 +990,20 @@ class AnimatedSidebar(QWidget):
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(0)
 
-        # Larger, visible Close and Toggle buttons (less flashy)
+        # Larger, visible Close and Toggle buttons (modern gradient look)
         self.close_btn = QPushButton("✕")
         self.close_btn.setFixedSize(36, 36)
         self.close_btn.setStyleSheet("""
             QPushButton {
-                background-color: #c62828;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ff6b6b, stop:1 #c62828);
                 color: white;
                 font-weight: bold;
                 font-size: 18px;
-                border-radius: 6px;
-                border: 1px solid #7f0000;
+                border-radius: 8px;
+                border: 1px solid rgba(0,0,0,0.25);
+                padding: 4px;
             }
-            QPushButton:hover {
-                background-color: #b71c1c;
-            }
+            QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ff5252, stop:1 #b71c1c); }
         """)
         self.close_btn.clicked.connect(QApplication.quit)
 
@@ -1012,41 +1011,49 @@ class AnimatedSidebar(QWidget):
         self.toggle_btn.setFixedSize(36, 36)
         self.toggle_btn.setStyleSheet("""
             QPushButton {
-                background-color: #d45353;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff8a65, stop:1 #d45353);
                 color: white;
                 font-weight: bold;
                 font-size: 18px;
-                border-radius: 6px;
-                border: 1px solid #8e0000;
+                border-radius: 8px;
+                border: 1px solid rgba(0,0,0,0.18);
             }
-            QPushButton:hover {
-                background-color: #c03939;
-            }
+            QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff7043, stop:1 #c03939); }
         """)
         # Toggle the right-hand info panel rather than collapsing the main sidebar
         self.toggle_btn.clicked.connect(self.toggle_info_panel)
 
-        # Fullscreen toggle button
+        # Fullscreen toggle button (modern)
         self.fullscreen_btn = QPushButton("⛶")
         self.fullscreen_btn.setFixedSize(36, 36)
         self.fullscreen_btn.setStyleSheet("""
-            QPushButton { background-color: #4caf50; color: white; border-radius:6px; border:1px solid #2e7d32; }
-            QPushButton:hover { background-color: #388e3c; }
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #66bb6a, stop:1 #43a047);
+                color: white;
+                border-radius: 8px;
+                border: 1px solid rgba(0,0,0,0.14);
+            }
+            QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #57a05a, stop:1 #2e7d32); }
         """)
         self.fullscreen_btn.clicked.connect(self.toggle_fullscreen)
 
-        # Theme toggle button (light/dark)
+        # Theme toggle button (modern)
         self.theme_btn = QPushButton("☼")
         self.theme_btn.setFixedSize(36, 36)
         self.theme_btn.setStyleSheet("""
-            QPushButton { background-color: #ffc107; color: #222; border-radius:6px; border:1px solid #b28704; }
-            QPushButton:hover { background-color: #ffb300; }
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ffd54f, stop:1 #ffb300);
+                color: #222;
+                border-radius: 8px;
+                border: 1px solid rgba(0,0,0,0.12);
+            }
+            QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ffca28, stop:1 #ffb300); }
         """)
         self.theme_btn.clicked.connect(self.toggle_theme)
 
         toggle_layout = QVBoxLayout()
-        toggle_layout.setContentsMargins(6,6,6,6)
-        toggle_layout.setSpacing(8)
+        toggle_layout.setContentsMargins(8,8,8,8)
+        toggle_layout.setSpacing(10)
         toggle_layout.addWidget(self.close_btn)
         toggle_layout.addWidget(self.toggle_btn)
         toggle_layout.addWidget(self.fullscreen_btn)
@@ -1055,22 +1062,24 @@ class AnimatedSidebar(QWidget):
 
         toggle_widget = QWidget()
         toggle_widget.setLayout(toggle_layout)
-        toggle_widget.setFixedWidth(56)
-        toggle_widget.setStyleSheet("background-color:#1f1f23;")
+        toggle_widget.setFixedWidth(64)
+        toggle_widget.setStyleSheet("""
+            QWidget { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #0f1724, stop:1 #1f2430); border-right: 1px solid rgba(255,255,255,0.03); }
+        """)
 
         self.sidebar = QFrame()
         # Keep the sidebar at a stable width so it doesn't get cramped, but allow animation by using max/min
         self.sidebar.setMaximumWidth(self.sidebar_width)
         self.sidebar.setMinimumWidth(self.sidebar_width)
-        # Simpler, subtler sidebar styling (less flashy)
+        # Modern subtle gradient sidebar styling
         self.sidebar.setStyleSheet("""
-            QFrame { background: #2f3136; border-right: 1px solid #444444; }
-            QLabel { font-family: 'Segoe UI', 'Verdana', 'Arial'; color: #f5f5f5; }
+            QFrame { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #15171a, stop:1 #24262a); border-right: 1px solid rgba(255,255,255,0.04); }
+            QLabel { font-family: 'Segoe UI', 'Verdana', 'Arial'; color: #e6eef6; }
         """)
         self.sidebar_layout = QVBoxLayout(self.sidebar)
         # Align content to top and give the sidebar slightly more padding so controls don't look cramped
-        self.sidebar_layout.setContentsMargins(14, 12, 14, 12)
-        self.sidebar_layout.setSpacing(10)
+        self.sidebar_layout.setContentsMargins(18, 12, 18, 12)
+        self.sidebar_layout.setSpacing(12)
         self.sidebar_layout.setAlignment(Qt.AlignTop)
 
         # Sidebar content will remain controls only; info panel will be on the right
@@ -1078,25 +1087,25 @@ class AnimatedSidebar(QWidget):
 
         def create_button_row(label_text, add_callback, remove_callback):
             label = QLabel(label_text)
-            label.setStyleSheet("color: #f5f5f5; font-weight: bold;")
+            label.setStyleSheet("color: #e6eef6; font-weight: 700; font-size: 12px;")
             self.sidebar_layout.addWidget(label)
 
             add_container = QWidget()
             add_layout = QHBoxLayout(add_container)
             add_layout.setContentsMargins(0, 0, 0, 0)
+            add_layout.setSpacing(8)
             for text, cb in [("+1", add_callback), ("+10", add_callback), ("+50", add_callback)]:
                 btn = QPushButton(text)
+                btn.setFixedHeight(30)
                 btn.setStyleSheet("""
                     QPushButton {
-                        background-color: #6ea8fe;
+                        background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #80bdff, stop:1 #6ea8fe);
                         color: white;
-                        border-radius: 3px;
-                        padding: 6px 10px;
+                        border-radius: 6px;
+                        padding: 4px 10px;
                         font-weight: 600;
                     }
-                    QPushButton:hover {
-                        background-color: #5b9cf5;
-                    }
+                    QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #6ea8fe, stop:1 #5b9cf5); }
                 """)
                 amount = int(text.replace("+", ""))
                 btn.clicked.connect(lambda checked, a=amount, cb=cb: cb(a))
@@ -1106,19 +1115,19 @@ class AnimatedSidebar(QWidget):
             remove_container = QWidget()
             remove_layout = QHBoxLayout(remove_container)
             remove_layout.setContentsMargins(0, 0, 0, 0)
+            remove_layout.setSpacing(8)
             for text, cb in [("-1", remove_callback), ("-10", remove_callback), ("-50", remove_callback)]:
                 btn = QPushButton(text)
+                btn.setFixedHeight(30)
                 btn.setStyleSheet("""
                     QPushButton {
-                        background-color: #ef9a9a;
+                        background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffbcbc, stop:1 #ef9a9a);
                         color: white;
-                        border-radius: 3px;
-                        padding: 6px 10px;
+                        border-radius: 6px;
+                        padding: 4px 10px;
                         font-weight: 600;
                     }
-                    QPushButton:hover {
-                        background-color: #e57373;
-                    }
+                    QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f48fb1, stop:1 #e57373); }
                 """)
                 amount = int(text.replace("-", ""))
                 btn.clicked.connect(lambda checked, a=amount, cb=cb: cb(a))
@@ -1139,23 +1148,34 @@ class AnimatedSidebar(QWidget):
 
         self.canvas_label = QLabel(AtomName())
         self.canvas_label.setAlignment(Qt.AlignCenter)
-        # Polished label styling for the canvas title
+        # Modern polished label styling for the canvas title (glass gradient)
         self.canvas_label.setStyleSheet("""
             QLabel {
                 font-size: 22px;
-                font-weight: bold;
-                padding: 12px;
-                background-color: #fafafa;
-                color: #222222;
-                border-bottom: 1px solid #e0e0e0;
+                font-weight: 700;
+                padding: 14px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(255,255,255,0.95), stop:1 rgba(240,246,255,0.95));
+                color: #1f2937;
+                border-bottom: 1px solid rgba(31,41,55,0.06);
             }
         """)
         content_layout.addWidget(self.canvas_label)
         # Create decay timer label (but don't show yet)
         self.decay_timer_label = QLabel()
         self.decay_timer_label.setAlignment(Qt.AlignCenter)
-        # Improved decay timer styling
-        self.decay_timer_label.setStyleSheet("font-size: 20px; color: #d32f2f; font-weight: bold; background: #fff3f2; border: 2px solid #d32f2f; border-radius: 8px; padding: 8px; margin: 10px;")
+        # Modern decay timer styling
+        self.decay_timer_label.setStyleSheet("""
+            QLabel {
+                font-size: 18px;
+                color: #7f1d1d;
+                font-weight: 700;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #fff1f0, stop:1 #ffe6e6);
+                border: 1px solid #f3a5a5;
+                border-radius: 10px;
+                padding: 8px 12px;
+                margin: 10px;
+            }
+        """)
         self.decay_timer_label.setMinimumWidth(220)
         self.decay_timer_label.hide()
         content_layout.addWidget(self.decay_timer_label)
@@ -1163,20 +1183,20 @@ class AnimatedSidebar(QWidget):
 
         content_layout.addWidget(canvas.native)
 
-        # Right-side info panel (subdued, toggleable)
+        # Right-side info panel (subdued, toggleable, modern gradient)
         self.info_width = 320
         self.info_panel_right = QFrame()
         # Allow animation by setting a maximum width; start visible at info_width
         self.info_panel_right.setMinimumWidth(0)
         self.info_panel_right.setMaximumWidth(self.info_width)
         self.info_panel_right.setStyleSheet("""
-            QFrame { background: #f7f8fa; border-left: 1px solid #dddddd; border-radius:6px; }
-            QLabel#InfoTitle { color: #333333; font-weight: 700; font-size: 16px; }
-            QLabel#InfoText { color: #444444; font-size: 13px; }
+            QFrame { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffffff, stop:1 #f0f5ff); border-left: 1px solid rgba(15,23,42,0.06); border-radius:8px; }
+            QLabel#InfoTitle { color: #0f1724; font-weight: 800; font-size: 15px; }
+            QLabel#InfoText { color: #334155; font-size: 13px; }
         """)
         self.info_layout_right = QVBoxLayout(self.info_panel_right)
-        self.info_layout_right.setContentsMargins(12,12,12,12)
-        self.info_layout_right.setSpacing(8)
+        self.info_layout_right.setContentsMargins(14,14,14,14)
+        self.info_layout_right.setSpacing(10)
         self.info_title_right = QLabel("ELEMENT INFO")
         self.info_title_right.setObjectName('InfoTitle')
         self.info_layout_right.addWidget(self.info_title_right)
@@ -1192,13 +1212,13 @@ class AnimatedSidebar(QWidget):
 
         # Animation to toggle the right info panel width
         self.info_animation = QPropertyAnimation(self.info_panel_right, b"maximumWidth")
-        self.info_animation.setDuration(260)
+        self.info_animation.setDuration(300)
         self.info_animation.setEasingCurve(QEasingCurve.OutCubic)
         self.info_panel_visible = True
 
         # Ensure sidebar animation exists and connect finished signals
         self.animation = QPropertyAnimation(self.sidebar, b"maximumWidth")
-        self.animation.setDuration(300)
+        self.animation.setDuration(320)
         self.animation.setEasingCurve(QEasingCurve.OutCubic)
         self.animation.finished.connect(self._on_sidebar_animation_finished)
         self.info_animation.finished.connect(self._on_info_animation_finished)
@@ -1259,18 +1279,69 @@ class AnimatedSidebar(QWidget):
             self.setWindowState(self.windowState() | QtCore.Qt.WindowFullScreen)
 
     def toggle_theme(self):
-        # Toggle between light and dark theme
+        # Toggle between light and dark theme and update relevant widget styles
+        self._theme_dark = not getattr(self, '_theme_dark', False)
         if self._theme_dark:
-            # Switch to light theme
-            canvas.bgcolor = 'white'
-            # Update button icon/text if needed
-            self.theme_btn.setText("☼")  # Sun icon for light theme
+            # Dark theme: dark canvas, dark title and info panel with light text
+            try:
+                canvas.bgcolor = '#0b0b0b'
+            except Exception:
+                pass
+            self.theme_btn.setText("🌙")
+            # Title (canvas_label) dark style
+            self.canvas_label.setStyleSheet("""
+                QLabel {
+                    font-size: 22px;
+                    font-weight: bold;
+                    padding: 12px;
+                    background-color: #111214;
+                    color: #f5f5f5;
+                    border-bottom: 1px solid #2a2a2a;
+                }
+            """)
+            # Info panel dark style
+            self.info_panel_right.setStyleSheet("""
+                QFrame { background: #1b1d20; border-left: 1px solid #333333; border-radius:6px; }
+                QLabel#InfoTitle { color: #f2f2f2; font-weight: 700; font-size: 16px; }
+                QLabel#InfoText { color: #dcdcdc; font-size: 13px; }
+            """)
+            # Sidebar subtle darken so it matches theme
+            self.sidebar.setStyleSheet("""
+                QFrame { background: #252628; border-right: 1px solid #3a3a3a; }
+                QLabel { font-family: 'Segoe UI', 'Verdana', 'Arial'; color: #f5f5f5; }
+            """)
+            # Counter label readability on dark
+            self.counter_label.setStyleSheet("color: #f5f5f5; font-weight: bold; margin-top: 8px; font-size: 14px; padding:4px;")
         else:
-            # Switch to dark theme
-            canvas.bgcolor = 'black'
-            # Update button icon/text if needed
-            self.theme_btn.setText("🌙")  # Moon icon for dark theme
-        self._theme_dark = not self._theme_dark  # Toggle state
+            # Light theme: restore canvas and widget styles to original light appearance
+            try:
+                canvas.bgcolor = 'white'
+            except Exception:
+                pass
+            self.theme_btn.setText("☼")
+            # Restore title style (light)
+            self.canvas_label.setStyleSheet("""
+                QLabel {
+                    font-size: 22px;
+                    font-weight: bold;
+                    padding: 12px;
+                    background-color: #fafafa;
+                    color: #222222;
+                    border-bottom: 1px solid #e0e0e0;
+                }
+            """)
+            # Restore info panel light style
+            self.info_panel_right.setStyleSheet("""
+                QFrame { background: #f7f8fa; border-left: 1px solid #dddddd; border-radius:6px; }
+                QLabel#InfoTitle { color: #333333; font-weight: 700; font-size: 16px; }
+                QLabel#InfoText { color: #444444; font-size: 13px; }
+            """)
+            # Restore sidebar style
+            self.sidebar.setStyleSheet("""
+                QFrame { background: #2f3136; border-right: 1px solid #444444; }
+                QLabel { font-family: 'Segoe UI', 'Verdana', 'Arial'; color: #f5f5f5; }
+            """)
+            self.counter_label.setStyleSheet("color: white; font-weight: bold; margin-top: 15px; font-size: 14px; padding:4px;")
 
     def show_decay_timer(self, seconds, label=None):
         """Show a proper countdown in the decay label and update every second.
