@@ -8,6 +8,7 @@ import numpy as np
 from vispy import scene, app
 from vispy.visuals import transforms
 from PyQt5 import QtWidgets, QtCore
+from PyQt5.QtGui import QFont
 from math import cos, sin, pi
 from vispy.color import Color
 import random
@@ -34,13 +35,20 @@ for _json_path in _json_path_candidates:
 
 qt_app = QtWidgets.QApplication(sys.argv)
 
+# Determine a DPI scale factor so UI element sizes remain consistent
+# across devices with different pixel densities. Base DPI is assumed 96.
+try:
+    _screen = qt_app.primaryScreen()
+    SCALE = float(_screen.logicalDotsPerInch()) / 96.0 if _screen is not None else 1.0
+except Exception:
+    SCALE = 1.0
 # Ensure VisPy uses the PyQt5 backend to integrate with the Qt event loop
 try:
     app.use_app('pyqt5')
 except Exception:
     pass
 
-canvas = scene.SceneCanvas(keys='interactive', size=(1000, 600), show=False)
+canvas = scene.SceneCanvas(keys='interactive', size=(int(1000 * SCALE), int(600 * SCALE)), show=False)
 canvas.bgcolor = 'white'
 canvas.native.setFocusPolicy(QtCore.Qt.NoFocus)
 
@@ -452,7 +460,7 @@ def add_particle(particle_type):
         electron_trail_points.append(trail_points)
 
         trail = scene.visuals.Line(
-            np.array(trail_points), color=(0.6, 0.6, 1, 0.4),
+            np.array(trail_points), color=(0.2, 0.7, 1.0, 0.7),
             width=1, method='gl'
         )
         view.add(trail)
@@ -901,12 +909,11 @@ class AnimatedSidebar(QWidget):
         self.update_info_panel()
 
     def update_info_panel(self):
-        # Build info text from ELEMENT_INFO JSON if available
+        # Build formatted info text from ELEMENT_INFO JSON with headings and new fields
         p = len(protons)
         n = len(neutrons)
         e = len(electrons)
         if p < 1:
-            # Update right-side info panel
             try:
                 self.info_label_right.setText("No nucleus present.")
             except Exception:
@@ -915,26 +922,46 @@ class AnimatedSidebar(QWidget):
         elem = ELEMENT_INFO.get(str(p)) if isinstance(ELEMENT_INFO, dict) else None
         base_name = ELEMENT_NAMES.get(p, f"Element Z={p}")
         stability = "Stable" if (abs(p - n) <= 2 and abs(p - e) <=5 and p>=1 and e>=1) else "Unstable"
-        info_lines = [f"Name: {base_name}", f"Z (Protons): {p}", f"Neutrons: {n}", f"Electrons: {e}", f"Stability: {stability}"]
-        # Isotope detection: check mass number (Z + N) against JSON isotopes keys (assumed mass numbers)
-        isotope_text = None
         mass_number = p + n
+        
+        # Format with rich text markup for headings
+        info_lines = [
+            f"<b>Atomic Number:</b> {p}",
+            f"<b>Neutrons:</b> {n}",
+            f"<b>Electrons:</b> {e}",
+            f"<b>Mass Number:</b> {mass_number}",
+            f"<b>Stability:</b> {stability}"
+        ]
+        
+        # Isotope info
+        isotope_text = None
         if elem and 'isotopes' in elem and isinstance(elem['isotopes'], dict):
             iso_entry = elem['isotopes'].get(str(mass_number)) or elem['isotopes'].get(str(n))
             if iso_entry:
-                name = iso_entry.get('name') or iso_entry.get('title') or f"Isotope {mass_number}"
-                info = iso_entry.get('info') or iso_entry.get('description') or ''
-                isotope_text = f"Isotope: {name} - {info}"
-        # Fallback simple rule: if neutrons != p, show isotope-like note
+                name = iso_entry.get('name') or f"Isotope {mass_number}"
+                info = iso_entry.get('info') or ''
+                isotope_text = f"<b>Isotope:</b> {name}<br>{info}" if info else f"<b>Isotope:</b> {name}"
+                if 'uses' in iso_entry:
+                    isotope_text += f"<br><b>Uses:</b> {iso_entry['uses']}"
+                if 'natural_occurrence' in iso_entry:
+                    isotope_text += f"<br><b>Natural Occurrence:</b> {iso_entry['natural_occurrence']}"
         if isotope_text is None and n != p:
-            isotope_text = f"Isotope-like: mass number {mass_number} (N={n})"
+            isotope_text = f"<b>Isotope-like:</b> mass number {mass_number} (N={n})"
         if isotope_text:
             info_lines.append(isotope_text)
-        # Include JSON description if available
-        if elem and 'description' in elem:
-            info_lines.append(f"Description: {elem['description']}")
-        # Write to the right-side info label if present, fallback to previous if not
-        text = '\n'.join(info_lines)
+        
+        # Element-level info
+        if elem:
+            if 'description' in elem:
+                info_lines.append(f"<b>Description:</b> {elem['description']}")
+            if 'uses' in elem:
+                info_lines.append(f"<b>Uses:</b> {elem['uses']}")
+            if 'natural_occurrence' in elem:
+                info_lines.append(f"<b>Natural Occurrence:</b> {elem['natural_occurrence']}")
+            if 'history' in elem:
+                info_lines.append(f"<b>History:</b> {elem['history']}")
+        
+        text = '<br><br>'.join(info_lines)
         try:
             self.info_label_right.setText(text)
         except Exception:
@@ -966,7 +993,9 @@ class AnimatedSidebar(QWidget):
         super().__init__()
         self.setWindowTitle("Animated Sidebar Fullscreen")
         self.sidebar_expanded = True
-        self.sidebar_width = 200
+        # Use DPI-scaled stable widths so layout looks the same on all displays
+        # Reduce default width to be less excessive while keeping text readable
+        self.sidebar_width = int(240 * SCALE)
         self.init_ui()
         self.counter_label = QLabel()
         # Improved counter label styling for readability
@@ -992,7 +1021,7 @@ class AnimatedSidebar(QWidget):
 
         # Larger, visible Close and Toggle buttons (modern gradient look)
         self.close_btn = QPushButton("✕")
-        self.close_btn.setFixedSize(36, 36)
+        self.close_btn.setFixedSize(int(36 * SCALE), int(36 * SCALE))
         self.close_btn.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ff6b6b, stop:1 #c62828);
@@ -1008,7 +1037,7 @@ class AnimatedSidebar(QWidget):
         self.close_btn.clicked.connect(QApplication.quit)
 
         self.toggle_btn = QPushButton("☰")
-        self.toggle_btn.setFixedSize(36, 36)
+        self.toggle_btn.setFixedSize(int(36 * SCALE), int(36 * SCALE))
         self.toggle_btn.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff8a65, stop:1 #d45353);
@@ -1020,12 +1049,12 @@ class AnimatedSidebar(QWidget):
             }
             QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff7043, stop:1 #c03939); }
         """)
-        # Toggle the right-hand info panel rather than collapsing the main sidebar
-        self.toggle_btn.clicked.connect(self.toggle_info_panel)
+        # Toggle the left sidebar
+        self.toggle_btn.clicked.connect(self.toggle_sidebar)
 
         # Fullscreen toggle button (modern)
         self.fullscreen_btn = QPushButton("⛶")
-        self.fullscreen_btn.setFixedSize(36, 36)
+        self.fullscreen_btn.setFixedSize(int(36 * SCALE), int(36 * SCALE))
         self.fullscreen_btn.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #66bb6a, stop:1 #43a047);
@@ -1039,7 +1068,7 @@ class AnimatedSidebar(QWidget):
 
         # Theme toggle button (modern)
         self.theme_btn = QPushButton("☼")
-        self.theme_btn.setFixedSize(36, 36)
+        self.theme_btn.setFixedSize(int(36 * SCALE), int(36 * SCALE))
         self.theme_btn.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ffd54f, stop:1 #ffb300);
@@ -1051,24 +1080,43 @@ class AnimatedSidebar(QWidget):
         """)
         self.theme_btn.clicked.connect(self.toggle_theme)
 
+        # Info panel toggle button (modern)
+        self.info_btn = QPushButton("ℹ")
+        self.info_btn.setFixedSize(int(36 * SCALE), int(36 * SCALE))
+        self.info_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #7c9ed9, stop:1 #4a5f9f);
+                color: white;
+                font-weight: bold;
+                font-size: 20px;
+                border-radius: 8px;
+                border: 1px solid rgba(0,0,0,0.16);
+            }
+            QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #5a7db5, stop:1 #2d3b5f); }
+        """)
+        self.info_btn.clicked.connect(self.toggle_info_panel)
+
         toggle_layout = QVBoxLayout()
-        toggle_layout.setContentsMargins(8,8,8,8)
-        toggle_layout.setSpacing(10)
+        toggle_layout.setContentsMargins(int(8 * SCALE), int(8 * SCALE), int(8 * SCALE), int(8 * SCALE))
+        toggle_layout.setSpacing(int(10 * SCALE))
+        # Add a top stretch so the toggle buttons stay centered vertically when resizing
         toggle_layout.addWidget(self.close_btn)
         toggle_layout.addWidget(self.toggle_btn)
         toggle_layout.addWidget(self.fullscreen_btn)
         toggle_layout.addWidget(self.theme_btn)
+        toggle_layout.addWidget(self.info_btn)
         toggle_layout.addStretch()
 
         toggle_widget = QWidget()
         toggle_widget.setLayout(toggle_layout)
-        toggle_widget.setFixedWidth(64)
+        toggle_widget.setFixedWidth(int(64 * SCALE))
         toggle_widget.setStyleSheet("""
             QWidget { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #0f1724, stop:1 #1f2430); border-right: 1px solid rgba(255,255,255,0.03); }
         """)
 
         self.sidebar = QFrame()
         # Keep the sidebar at a stable width so it doesn't get cramped, but allow animation by using max/min
+        # Keep a fixed width for sidebar so it doesn't visually compress on different screens
         self.sidebar.setMaximumWidth(self.sidebar_width)
         self.sidebar.setMinimumWidth(self.sidebar_width)
         # Modern subtle gradient sidebar styling
@@ -1077,60 +1125,81 @@ class AnimatedSidebar(QWidget):
             QLabel { font-family: 'Segoe UI', 'Verdana', 'Arial'; color: #e6eef6; }
         """)
         self.sidebar_layout = QVBoxLayout(self.sidebar)
-        # Align content to top and give the sidebar slightly more padding so controls don't look cramped
-        self.sidebar_layout.setContentsMargins(18, 12, 18, 12)
-        self.sidebar_layout.setSpacing(12)
+        # Align content to top with generous spacing
+        self.sidebar_layout.setContentsMargins(int(24 * SCALE), int(16 * SCALE), int(24 * SCALE), int(16 * SCALE))
+        self.sidebar_layout.setSpacing(int(18 * SCALE))
         self.sidebar_layout.setAlignment(Qt.AlignTop)
 
         # Sidebar content will remain controls only; info panel will be on the right
         # (Removed early addStretch to avoid large top gap)
+        # Track sidebar buttons and labels for dynamic height/font scaling on resize
+        self._sidebar_buttons = []
+        self._sidebar_labels = []
 
         def create_button_row(label_text, add_callback, remove_callback):
             label = QLabel(label_text)
-            label.setStyleSheet("color: #e6eef6; font-weight: 700; font-size: 12px;")
+            label.setStyleSheet("color: #e6eef6; font-weight: 700;")
+            # Use a font object so the resize handler can scale it (base 16pt)
+            lf = label.font()
+            lf.setPointSizeF(16.0)
+            label.setFont(lf)
             self.sidebar_layout.addWidget(label)
+            self._sidebar_labels.append(label)
 
             add_container = QWidget()
             add_layout = QHBoxLayout(add_container)
             add_layout.setContentsMargins(0, 0, 0, 0)
-            add_layout.setSpacing(8)
+            add_layout.setSpacing(int(12 * SCALE))
             for text, cb in [("+1", add_callback), ("+10", add_callback), ("+50", add_callback)]:
                 btn = QPushButton(text)
-                btn.setFixedHeight(30)
+                btn.setFixedHeight(int(44 * SCALE))
                 btn.setStyleSheet("""
                     QPushButton {
-                        background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #80bdff, stop:1 #6ea8fe);
-                        color: white;
-                        border-radius: 6px;
-                        padding: 4px 10px;
-                        font-weight: 600;
+                        background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #1643a3, stop:1 #0b246e);
+                        color: #ffffff;
+                        border-radius: 10px;
+                        padding: 8px 14px;
+                        font-weight: 700;
+                        font-size: 15px;
+                        border: 1px solid rgba(0,0,0,0.18);
                     }
-                    QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #6ea8fe, stop:1 #5b9cf5); }
+                    QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #0e2f7a, stop:1 #071744); }
                 """)
+                # Set a base font size for scaling
+                bf = btn.font()
+                bf.setPointSizeF(13.0)
+                btn.setFont(bf)
                 amount = int(text.replace("+", ""))
                 btn.clicked.connect(lambda checked, a=amount, cb=cb: cb(a))
+                self._sidebar_buttons.append(btn)
                 add_layout.addWidget(btn)
             self.sidebar_layout.addWidget(add_container)
 
             remove_container = QWidget()
             remove_layout = QHBoxLayout(remove_container)
             remove_layout.setContentsMargins(0, 0, 0, 0)
-            remove_layout.setSpacing(8)
+            remove_layout.setSpacing(int(12 * SCALE))
             for text, cb in [("-1", remove_callback), ("-10", remove_callback), ("-50", remove_callback)]:
                 btn = QPushButton(text)
-                btn.setFixedHeight(30)
+                btn.setFixedHeight(int(44 * SCALE))
                 btn.setStyleSheet("""
                     QPushButton {
-                        background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffbcbc, stop:1 #ef9a9a);
-                        color: white;
-                        border-radius: 6px;
-                        padding: 4px 10px;
-                        font-weight: 600;
+                        background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #6e0c0c, stop:1 #2b0000);
+                        color: #ffffff;
+                        border-radius: 10px;
+                        padding: 8px 14px;
+                        font-weight: 700;
+                        font-size: 15px;
+                        border: 1px solid rgba(0,0,0,0.22);
                     }
-                    QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f48fb1, stop:1 #e57373); }
+                    QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #4d0a0a, stop:1 #1a0000); }
                 """)
+                bf = btn.font()
+                bf.setPointSizeF(13.0)
+                btn.setFont(bf)
                 amount = int(text.replace("-", ""))
                 btn.clicked.connect(lambda checked, a=amount, cb=cb: cb(a))
+                self._sidebar_buttons.append(btn)
                 remove_layout.addWidget(btn)
             self.sidebar_layout.addWidget(remove_container)
 
@@ -1148,12 +1217,14 @@ class AnimatedSidebar(QWidget):
 
         self.canvas_label = QLabel(AtomName())
         self.canvas_label.setAlignment(Qt.AlignCenter)
+        self.canvas_label.setMinimumHeight(int(60 * SCALE))
+        self.canvas_label.setMaximumHeight(int(90 * SCALE))
         # Modern polished label styling for the canvas title (glass gradient)
         self.canvas_label.setStyleSheet("""
             QLabel {
-                font-size: 22px;
+                font-size: 18px;
                 font-weight: 700;
-                padding: 14px;
+                padding: 12px 8px;
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(255,255,255,0.95), stop:1 rgba(240,246,255,0.95));
                 color: #1f2937;
                 border-bottom: 1px solid rgba(31,41,55,0.06);
@@ -1176,15 +1247,17 @@ class AnimatedSidebar(QWidget):
                 margin: 10px;
             }
         """)
-        self.decay_timer_label.setMinimumWidth(220)
+        self.decay_timer_label.setMinimumWidth(int(220 * SCALE))
         self.decay_timer_label.hide()
         content_layout.addWidget(self.decay_timer_label)
         # ----------------------
 
+        # Ensure the VisPy canvas has a reasonable minimum size (DPI-scaled)
+        canvas.native.setMinimumSize(int(800 * SCALE), int(480 * SCALE))
         content_layout.addWidget(canvas.native)
 
         # Right-side info panel (subdued, toggleable, modern gradient)
-        self.info_width = 320
+        self.info_width = int(320 * SCALE)
         self.info_panel_right = QFrame()
         # Allow animation by setting a maximum width; start visible at info_width
         self.info_panel_right.setMinimumWidth(0)
@@ -1195,14 +1268,31 @@ class AnimatedSidebar(QWidget):
             QLabel#InfoText { color: #334155; font-size: 13px; }
         """)
         self.info_layout_right = QVBoxLayout(self.info_panel_right)
-        self.info_layout_right.setContentsMargins(14,14,14,14)
-        self.info_layout_right.setSpacing(10)
+        self.info_layout_right.setContentsMargins(int(14 * SCALE), int(14 * SCALE), int(14 * SCALE), int(14 * SCALE))
+        self.info_layout_right.setSpacing(int(10 * SCALE))
+        # Info panel header with a close button on the right (shorter and broader)
+        header_widget = QWidget()
+        header_layout = QHBoxLayout(header_widget)
+        header_layout.setContentsMargins(0, 4, 0, 4)
+        header_layout.setSpacing(int(6 * SCALE))
+        header_widget.setFixedHeight(int(38 * SCALE))
         self.info_title_right = QLabel("ELEMENT INFO")
         self.info_title_right.setObjectName('InfoTitle')
-        self.info_layout_right.addWidget(self.info_title_right)
+        header_layout.addWidget(self.info_title_right)
+        header_layout.addStretch()
+        self.info_close_btn = QPushButton("✕")
+        self.info_close_btn.setFixedSize(int(28 * SCALE), int(28 * SCALE))
+        self.info_close_btn.setStyleSheet("""
+            QPushButton { background: transparent; color: #334155; border: none; font-weight: 800; }
+            QPushButton:hover { color: #111827; }
+        """)
+        self.info_close_btn.clicked.connect(self.toggle_info_panel)
+        header_layout.addWidget(self.info_close_btn)
+        self.info_layout_right.addWidget(header_widget)
         self.info_label_right = QLabel("")
         self.info_label_right.setObjectName('InfoText')
         self.info_label_right.setWordWrap(True)
+        self.info_label_right.setTextFormat(Qt.RichText)
         self.info_layout_right.addWidget(self.info_label_right)
 
         self.main_layout.addWidget(toggle_widget)
@@ -1212,14 +1302,14 @@ class AnimatedSidebar(QWidget):
 
         # Animation to toggle the right info panel width
         self.info_animation = QPropertyAnimation(self.info_panel_right, b"maximumWidth")
-        self.info_animation.setDuration(300)
-        self.info_animation.setEasingCurve(QEasingCurve.OutCubic)
+        self.info_animation.setDuration(900)
+        self.info_animation.setEasingCurve(QEasingCurve.InOutCubic)
         self.info_panel_visible = True
 
         # Ensure sidebar animation exists and connect finished signals
         self.animation = QPropertyAnimation(self.sidebar, b"maximumWidth")
-        self.animation.setDuration(320)
-        self.animation.setEasingCurve(QEasingCurve.OutCubic)
+        self.animation.setDuration(900)
+        self.animation.setEasingCurve(QEasingCurve.InOutCubic)
         self.animation.finished.connect(self._on_sidebar_animation_finished)
         self.info_animation.finished.connect(self._on_info_animation_finished)
         # Track theme: start with light theme
@@ -1277,6 +1367,51 @@ class AnimatedSidebar(QWidget):
             self.setWindowState(self.windowState() & ~QtCore.Qt.WindowFullScreen)
         else:
             self.setWindowState(self.windowState() | QtCore.Qt.WindowFullScreen)
+
+    def resizeEvent(self, event):
+        # Scale certain widget heights and fonts proportionally to window height.
+        # We only grow sizes (never shrink below base) to keep buttons usable.
+        try:
+            h = max(1, self.height())
+            scale = max(1.0, float(h) / float(int(720 * SCALE)))
+            base_toggle = int(44 * SCALE)
+            base_btn_h = int(40 * SCALE)
+            # Toggle buttons (square)
+            new_toggle = int(max(base_toggle, round(base_toggle * scale)))
+            for b in [self.close_btn, self.toggle_btn, self.fullscreen_btn, self.theme_btn, self.info_btn]:
+                b.setFixedSize(new_toggle, new_toggle)
+                f = b.font()
+                f.setPointSizeF(max(11.0, 11.0 * scale))
+                b.setFont(f)
+            # Sidebar +/- buttons
+            for b in getattr(self, '_sidebar_buttons', []):
+                new_h = int(max(base_btn_h, round(base_btn_h * scale)))
+                b.setFixedHeight(new_h)
+                f = b.font()
+                f.setPointSizeF(max(12.0, 12.0 * scale))
+                b.setFont(f)
+            # Sidebar labels
+            for lbl in getattr(self, '_sidebar_labels', []):
+                lf = lbl.font()
+                lf.setPointSizeF(max(16.0, 16.0 * scale))
+                lbl.setFont(lf)
+            # Counter label
+            if hasattr(self, 'counter_label') and self.counter_label is not None:
+                f2 = self.counter_label.font()
+                f2.setPointSizeF(max(12.0, 12.0 * scale))
+                self.counter_label.setFont(f2)
+            # Info panel fonts
+            if hasattr(self, 'info_title_right') and self.info_title_right is not None:
+                ft = self.info_title_right.font()
+                ft.setPointSizeF(max(20.0, 20.0 * scale))
+                self.info_title_right.setFont(ft)
+            if hasattr(self, 'info_label_right') and self.info_label_right is not None:
+                fl = self.info_label_right.font()
+                fl.setPointSizeF(max(28.0, 28.0 * scale))
+                self.info_label_right.setFont(fl)
+        except Exception:
+            pass
+        super().resizeEvent(event)
 
     def toggle_theme(self):
         # Toggle between light and dark theme and update relevant widget styles
