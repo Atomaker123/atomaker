@@ -8,7 +8,7 @@ import numpy as np
 from vispy import scene, app
 from vispy.visuals import transforms
 from PyQt5 import QtWidgets, QtCore
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QCursor
 from math import cos, sin, pi
 from vispy.color import Color
 import random
@@ -42,6 +42,46 @@ try:
     SCALE = float(_screen.logicalDotsPerInch()) / 96.0 if _screen is not None else 1.0
 except Exception:
     SCALE = 1.0
+
+# Hover-expand widget used for the left toggle column (expands on mouse hover)
+class HoverToggleWidget(QWidget):
+    def __init__(self, expanded_width=64, collapsed_width=0, parent=None):
+        super().__init__(parent)
+        self.expanded_width = int(expanded_width)
+        # If collapsed width is zero the widget will not receive hover events on many platforms.
+        # Use a small interactive hotspot so enter/leave events are delivered and we can animate.
+        self.collapsed_width = int(max(8, int(collapsed_width)))
+        # Start collapsed by limiting both minimum and maximum to the small hotspot width
+        self.setMaximumWidth(self.collapsed_width)
+        self.setMinimumWidth(self.collapsed_width)
+        # Ensure we receive hover/mouse move events even if child widgets are present
+        self.setAttribute(Qt.WA_Hover, True)
+        self.setMouseTracking(True)
+        self._anim = QPropertyAnimation(self, b"maximumWidth")
+        self._anim.setDuration(220)
+        self._anim.setEasingCurve(QEasingCurve.OutCubic)
+
+    def enterEvent(self, event):
+        try:
+            self._anim.stop()
+            self._anim.setStartValue(self.width())
+            self._anim.setEndValue(self.expanded_width)
+            self._anim.start()
+        except Exception:
+            pass
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        try:
+            # Collapse back when mouse leaves the left column to the small hotspot width
+            self._anim.stop()
+            self._anim.setStartValue(self.width())
+            self._anim.setEndValue(self.collapsed_width)
+            self._anim.start()
+        except Exception:
+            pass
+        super().leaveEvent(event)
+
 # Ensure VisPy uses the PyQt5 backend to integrate with the Qt event loop
 try:
     app.use_app('pyqt5')
@@ -1107,12 +1147,26 @@ class AnimatedSidebar(QWidget):
         toggle_layout.addWidget(self.info_btn)
         toggle_layout.addStretch()
 
-        toggle_widget = QWidget()
-        toggle_widget.setLayout(toggle_layout)
-        toggle_widget.setFixedWidth(int(64 * SCALE))
-        toggle_widget.setStyleSheet("""
-            QWidget { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #0f1724, stop:1 #1f2430); border-right: 1px solid rgba(255,255,255,0.03); }
-        """)
+        # Create a hover-expand left toggle column that starts collapsed (small hotspot width)
+        self.toggle_widget = HoverToggleWidget(expanded_width=int(64 * SCALE), collapsed_width=int(max(8, int(12 * SCALE))))
+        self.toggle_widget.setLayout(toggle_layout)
+        # Start fully hidden: collapsed to 0 width and not visible so it doesn't occupy layout space
+        try:
+            self.toggle_widget.setVisible(False)
+            self.toggle_widget.setMinimumWidth(0)
+            self.toggle_widget.setMaximumWidth(0)
+        except Exception:
+            pass
+
+        # The toggle_widget style is applied by theme helpers below so it matches light/dark modes.
+        # We will control actual expand/collapse using a short-running timer that checks
+        # the mouse position (works even when widget width is zero). This lets the
+        # widget fully disappear when collapsed while still reliably expanding on hover.
+        self.toggle_expanded = False
+        self.toggle_anim = QPropertyAnimation(self.toggle_widget, b"maximumWidth")
+        self.toggle_anim.setDuration(220)
+        self.toggle_anim.setEasingCurve(QEasingCurve.OutCubic)
+        self.toggle_anim.finished.connect(self._on_toggle_anim_finished)
 
         self.sidebar = QFrame()
         # Keep the sidebar at a stable width so it doesn't get cramped, but allow animation by using max/min
@@ -1295,25 +1349,109 @@ class AnimatedSidebar(QWidget):
         self.info_label_right.setTextFormat(Qt.RichText)
         self.info_layout_right.addWidget(self.info_label_right)
 
-        self.main_layout.addWidget(toggle_widget)
+        self.main_layout.addWidget(self.toggle_widget)
         self.main_layout.addWidget(self.sidebar)
         self.main_layout.addWidget(self.content)
         self.main_layout.addWidget(self.info_panel_right)
 
-        # Animation to toggle the right info panel width
-        self.info_animation = QPropertyAnimation(self.info_panel_right, b"maximumWidth")
-        self.info_animation.setDuration(900)
-        self.info_animation.setEasingCurve(QEasingCurve.InOutCubic)
-        self.info_panel_visible = True
+        # Start a short timer to poll the cursor location and expand/collapse the left toggle
+        # This avoids relying on widget enter/leave events which can be unreliable when
+        # the widget is visually collapsed to zero width.
+        self._hover_timer = QTimer(self)
+        self._hover_timer.setInterval(80)
+        self._hover_timer.timeout.connect(self._check_toggle_hover)
+        self._hover_timer.start()
 
-        # Ensure sidebar animation exists and connect finished signals
+        # Ensure sidebar and info-panel animations exist and connect finished signals
         self.animation = QPropertyAnimation(self.sidebar, b"maximumWidth")
         self.animation.setDuration(900)
         self.animation.setEasingCurve(QEasingCurve.InOutCubic)
         self.animation.finished.connect(self._on_sidebar_animation_finished)
+        # Create info panel animation before connecting its finished signal
+        self.info_animation = QPropertyAnimation(self.info_panel_right, b"maximumWidth")
+        self.info_animation.setDuration(900)
+        self.info_animation.setEasingCurve(QEasingCurve.InOutCubic)
         self.info_animation.finished.connect(self._on_info_animation_finished)
+        # Track whether the info panel is visible (used by toggle handlers)
+        self.info_panel_visible = True
+
         # Track theme: start with light theme
         self._theme_dark = False
+        # Apply initial styles for the left toggle hotspot and the add/remove sidebar
+        try:
+            self._apply_toggle_widget_style()
+            self._apply_sidebar_style()
+        except Exception:
+            pass
+
+    def _on_toggle_anim_finished(self):
+        # If we've collapsed, hide the widget so it visually disappears. Ensure minimum
+        # width is zero so it doesn't occupy layout space.
+        try:
+            if not self.toggle_expanded:
+                self.toggle_widget.setVisible(False)
+                self.toggle_widget.setMinimumWidth(0)
+                self.toggle_widget.setMaximumWidth(0)
+            else:
+                # Ensure visible and allow minimum width to be the expanded width
+                self.toggle_widget.setVisible(True)
+                self.toggle_widget.setMinimumWidth(self.toggle_widget.expanded_width)
+        except Exception:
+            pass
+
+    def _expand_toggle(self):
+        try:
+            if self.toggle_widget is None:
+                return
+            # Ensure visible before animating
+            self.toggle_widget.setVisible(True)
+            self.toggle_widget.setMinimumWidth(0)
+            self.toggle_anim.stop()
+            self.toggle_anim.setStartValue(self.toggle_widget.width())
+            self.toggle_anim.setEndValue(self.toggle_widget.expanded_width)
+            self.toggle_anim.start()
+            self.toggle_expanded = True
+        except Exception:
+            pass
+
+    def _collapse_toggle(self):
+        try:
+            if self.toggle_widget is None:
+                return
+            self.toggle_anim.stop()
+            self.toggle_anim.setStartValue(self.toggle_widget.width())
+            self.toggle_anim.setEndValue(0)
+            self.toggle_anim.start()
+            self.toggle_expanded = False
+        except Exception:
+            pass
+
+    def _check_toggle_hover(self):
+        """Poll the global cursor position and expand/collapse the left toggle.
+        The threshold is a small region at the left edge of the application window.
+        """
+        try:
+            # Global cursor position
+            global_pos = QCursor.pos()
+            local_pos = self.mapFromGlobal(global_pos)
+            # If cursor isn't within our window rect, collapse
+            if not self.rect().contains(local_pos):
+                if self.toggle_expanded:
+                    self._collapse_toggle()
+                return
+            x = local_pos.x()
+            # Expand when cursor is within a small hotspot on the left edge (scaled)
+            hotspot = max(8, int(12 * SCALE))
+            if x >= 0 and x <= hotspot:
+                if not self.toggle_expanded:
+                    self._expand_toggle()
+            else:
+                # If cursor moved beyond the expanded width plus small margin, collapse
+                margin = 6
+                if x > (self.toggle_widget.expanded_width + margin) and self.toggle_expanded:
+                    self._collapse_toggle()
+        except Exception:
+            pass
 
     def toggle_sidebar(self):
         # Animate sidebar open/closed and update minimum width when done to preserve layout
@@ -1445,8 +1583,15 @@ class AnimatedSidebar(QWidget):
                 QFrame { background: #252628; border-right: 1px solid #3a3a3a; }
                 QLabel { font-family: 'Segoe UI', 'Verdana', 'Arial'; color: #f5f5f5; }
             """)
-            # Counter label readability on dark
-            self.counter_label.setStyleSheet("color: #f5f5f5; font-weight: bold; margin-top: 8px; font-size: 14px; padding:4px;")
+            # Left toggle column dark background
+            self._apply_toggle_widget_style()
+            # Ensure all sidebar buttons/labels adopt dark theme
+            self._apply_sidebar_style()
+            # Content background dark
+            try:
+                self.content.setStyleSheet("background-color: #0b0b0b;")
+            except Exception:
+                pass
         else:
             # Light theme: restore canvas and widget styles to original light appearance
             try:
@@ -1476,7 +1621,128 @@ class AnimatedSidebar(QWidget):
                 QFrame { background: #2f3136; border-right: 1px solid #444444; }
                 QLabel { font-family: 'Segoe UI', 'Verdana', 'Arial'; color: #f5f5f5; }
             """)
-            self.counter_label.setStyleSheet("color: white; font-weight: bold; margin-top: 15px; font-size: 14px; padding:4px;")
+            # Update left toggle column and sidebar styles to match light theme
+            self._apply_toggle_widget_style()
+            self._apply_sidebar_style()
+            # Content background light
+            try:
+                self.content.setStyleSheet("background-color: white;")
+            except Exception:
+                pass
+        # Ensure toggle visibility reflects the new theme (keep it hidden if collapsed)
+        try:
+            if not getattr(self, 'toggle_expanded', False):
+                self.toggle_widget.setVisible(False)
+        except Exception:
+            pass
+
+    def _apply_toggle_widget_style(self):
+        """Apply the left hover-toggle column style according to current theme and update its child buttons' colors."""
+        try:
+            if getattr(self, '_theme_dark', False):
+                style = "QWidget { background: #000000; border-right: 1px solid rgba(255,255,255,0.02); }"
+                btn_color = '#ffffff'
+                btn_bg = 'qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3b4250, stop:1 #1f2328)'
+            else:
+                style = "QWidget { background: #ffffff; border-right: 1px solid rgba(0,0,0,0.06); }"
+                btn_color = '#0b0b0b'
+                btn_bg = 'qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f0f3f7, stop:1 #e3e7ea)'
+            if hasattr(self, 'toggle_widget') and self.toggle_widget is not None:
+                self.toggle_widget.setStyleSheet(style)
+                # Update the buttons inside the toggle hotspot so their text is visible for the theme
+                try:
+                    for b in self.toggle_widget.findChildren(QPushButton):
+                        b.setStyleSheet(f"""
+                            QPushButton {{ background: {btn_bg}; color: {btn_color}; font-weight: bold; border-radius: 8px; border: 1px solid rgba(0,0,0,0.08); }}
+                            QPushButton:hover {{ opacity: 0.95; }}
+                        """)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def _apply_sidebar_style(self):
+        """Apply the main sidebar background and label/button colors according to current theme.
+        This will aggressively override earlier hardcoded styles so text/colors are always correct.
+        """
+        try:
+            dark = getattr(self, '_theme_dark', False)
+            if dark:
+                # Sidebar frame + labels
+                self.sidebar.setStyleSheet("""
+                    QFrame { background: #121214; border-right: 1px solid #2a2a2a; }
+                """)
+                if hasattr(self, 'counter_label') and self.counter_label is not None:
+                    self.counter_label.setStyleSheet("color: #f5f5f5; font-weight: bold; margin-top: 15px; font-size: 14px; padding:4px;")
+                # Sidebar labels
+                for lbl in getattr(self, '_sidebar_labels', []):
+                    try:
+                        lbl.setStyleSheet('color: #f5f5f5; font-weight: 700;')
+                    except Exception:
+                        pass
+                # Sidebar add/remove buttons (override any prior styles so text isn't white in light mode)
+                for btn in self.sidebar.findChildren(QPushButton):
+                    try:
+                        btn.setStyleSheet('''
+                            QPushButton { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #1643a3, stop:1 #0b246e); color: #ffffff; border-radius: 10px; padding: 8px 14px; font-weight: 700; font-size: 15px; border: 1px solid rgba(0,0,0,0.18); }
+                            QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #0e2f7a, stop:1 #071744); }
+                        ''')
+                    except Exception:
+                        pass
+                # Top control buttons (also include info close button)
+                top_buttons = [getattr(self, 'close_btn', None), getattr(self, 'toggle_btn', None), getattr(self, 'fullscreen_btn', None), getattr(self, 'theme_btn', None), getattr(self, 'info_btn', None), getattr(self, 'info_close_btn', None)]
+                for b in top_buttons:
+                    if b is None:
+                        continue
+                    try:
+                        b.setStyleSheet('''
+                            QPushButton { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3a3f48, stop:1 #222427); color: #ffffff; font-weight: bold; border-radius: 8px; border: 1px solid rgba(0,0,0,0.14); }
+                            QPushButton:hover { opacity: 0.95; }
+                        ''')
+                    except Exception:
+                        pass
+            else:
+                # Light theme: bright sidebar with dark text for all labels/buttons
+                self.sidebar.setStyleSheet("""
+                    QFrame { background: #ffffff; border-right: 1px solid rgba(0,0,0,0.08); }
+                """)
+                if hasattr(self, 'counter_label') and self.counter_label is not None:
+                    self.counter_label.setStyleSheet('color: #0b0b0b; font-weight: bold; margin-top: 15px; font-size: 14px; padding:4px;')
+                for lbl in getattr(self, '_sidebar_labels', []):
+                    try:
+                        lbl.setStyleSheet('color: #0b0b0b; font-weight: 700;')
+                    except Exception:
+                        pass
+                # Sidebar buttons: use lighter backgrounds and dark text
+                for btn in self.sidebar.findChildren(QPushButton):
+                    try:
+                        btn.setStyleSheet('''
+                            QPushButton { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f0f3f7, stop:1 #e3e7ea); color: #0b0b0b; border-radius: 10px; padding: 8px 14px; font-weight: 700; font-size: 15px; border: 1px solid rgba(0,0,0,0.08); }
+                            QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #e6eaef, stop:1 #dfe6eb); }
+                        ''')
+                    except Exception:
+                        pass
+                # Top control buttons: lighter variants
+                top_buttons = [getattr(self, 'close_btn', None), getattr(self, 'toggle_btn', None), getattr(self, 'fullscreen_btn', None), getattr(self, 'theme_btn', None), getattr(self, 'info_btn', None), getattr(self, 'info_close_btn', None)]
+                for b in top_buttons:
+                    if b is None:
+                        continue
+                    try:
+                        # Use different background for theme button to preserve its visual affordance
+                        if b is getattr(self, 'theme_btn', None):
+                            b.setStyleSheet('''
+                                QPushButton { background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ffd54f, stop:1 #ffb300); color: #222222; border-radius: 8px; border: 1px solid rgba(0,0,0,0.12); }
+                                QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ffca28, stop:1 #ffb300); }
+                            ''')
+                        else:
+                            b.setStyleSheet('''
+                                QPushButton { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ffffff, stop:1 #f0f2f4); color: #0b0b0b; font-weight: bold; border-radius: 8px; border: 1px solid rgba(0,0,0,0.10); }
+                                QPushButton:hover { opacity: 0.98; }
+                            ''')
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
     def show_decay_timer(self, seconds, label=None):
         """Show a proper countdown in the decay label and update every second.
